@@ -1,27 +1,44 @@
 import { Elysia, t } from "elysia";
-import { db } from "../db";
-import { users } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { auth as authPlugin, resolveSession } from "../middleware/auth";
+import { fail, ok } from "../lib/http";
+import { toUserDto } from "../mappers/user.mapper";
+import { userRepository } from "../repositories/user.repository";
 
 export const userRoutes = new Elysia({ prefix: "/users" })
-  .get("/", () => {
-    return db.select().from(users);
+  .use(authPlugin)
+  .get("/", async ({ headers, accessAuth, set }) => {
+    const session = await resolveSession(headers.authorization, accessAuth);
+
+    if (!session) {
+      set.status = 401;
+      return fail("Unauthorized");
+    }
+
+    return ok(userRepository.findCurrentListById(session.id));
   })
   .get(
     "/:id",
-    ({ params: { id }, set }) => {
-      const user = db
-        .select()
-        .from(users)
-        .where(eq(users.id, Number(id)))
-        .get();
+    async ({ params: { id }, headers, accessAuth, set }) => {
+      const session = await resolveSession(headers.authorization, accessAuth);
+
+      if (!session) {
+        set.status = 401;
+        return fail("Unauthorized");
+      }
+
+      if (session.id !== Number(id)) {
+        set.status = 403;
+        return fail("Forbidden");
+      }
+
+      const user = userRepository.findById(Number(id));
 
       if (!user) {
         set.status = 404;
-        return { error: "User not found" };
+        return fail("User not found");
       }
 
-      return { id: user.id, email: user.email, name: user.name };
+      return ok(toUserDto(user));
     },
     {
       params: t.Object({ id: t.String() }),
@@ -29,21 +46,29 @@ export const userRoutes = new Elysia({ prefix: "/users" })
   )
   .delete(
     "/:id",
-    ({ params: { id }, set }) => {
-      const user = db
-        .select()
-        .from(users)
-        .where(eq(users.id, Number(id)))
-        .get();
+    async ({ params: { id }, headers, accessAuth, set }) => {
+      const session = await resolveSession(headers.authorization, accessAuth);
+
+      if (!session) {
+        set.status = 401;
+        return fail("Unauthorized");
+      }
+
+      if (session.id !== Number(id)) {
+        set.status = 403;
+        return fail("Forbidden");
+      }
+
+      const user = userRepository.findById(Number(id));
 
       if (!user) {
         set.status = 404;
-        return { error: "User not found" };
+        return fail("User not found");
       }
 
-      db.delete(users).where(eq(users.id, Number(id))).run();
+      userRepository.deleteById(Number(id));
 
-      return { success: true };
+      return ok({ success: true });
     },
     {
       params: t.Object({ id: t.String() }),

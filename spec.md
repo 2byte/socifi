@@ -2,6 +2,7 @@
 Приложение для создания и работы с личным пространством.
 
 # Users
+
 ## Таблица
 Таблица `users`
 - `id` - autoincrement
@@ -9,6 +10,8 @@
 - `login` - login
 - `password` - password
 - `name` - name
+- `created_at` - created_at
+- `updated_at` - updated_at
 
 # Workspaces
 По умолчанию первое пространство `default`
@@ -20,12 +23,18 @@
 - `user_id` - id user
 - `name` - name
 - `props` - json
+- `created_at` - created_at
+- `updated_at` - updated_at
 
 # Categories
 Таблица `categories`
 - `id` - autoincrement
 - `user_id` - id user
 - `workspace_id` - relation belongs to `workspaces` possible is null
+- `name`- name
+- `props` - json default {}
+- `created_at` - created_at
+- `updated_at` - updated_at
 
 # Notes
 
@@ -37,3 +46,5 @@
 - `content` - content | json
 - `tags` - array of tags
 - `props` - json default {}
+- `created_at` - created_at
+- `updated_at` - updated_at
