@@ -3,6 +3,7 @@ import { cors } from "@elysiajs/cors";
 import { auth } from "./middleware/auth";
 import { authRoutes } from "./routes/auth";
 import { categoryRoutes } from "./routes/categories";
+import { noteRoutes } from "./routes/notes";
 import { productionRoutes } from "./routes/production";
 import { userRoutes } from "./routes/users";
 import { workspaceRoutes } from "./routes/workspaces";
@@ -20,6 +21,7 @@ const app = new Elysia()
   .use(auth)
   .use(authRoutes)
   .use(categoryRoutes)
+  .use(noteRoutes)
   .use(userRoutes)
   .use(workspaceRoutes)
   .use(productionRoutes)

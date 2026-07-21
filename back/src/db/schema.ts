@@ -54,10 +54,35 @@ export const notes = sqliteTable("notes", {
     onDelete: "set null",
   }),
   title: text("title").notNull(),
-  content: text("content"),
-  tags: text("tags"),
-  props: text("props").$defaultFn(() => "{}"),
+  content: text("content")
+    .notNull()
+    .$defaultFn(() => "{}"),
+  tags: text("tags")
+    .notNull()
+    .$defaultFn(() => "[]"),
+  props: text("props")
+    .notNull()
+    .$defaultFn(() => "{}"),
   ...timestamps,
+});
+
+export const notesPosts = sqliteTable("notes_posts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  noteId: integer("note_id")
+    .notNull()
+    .references(() => notes.id, { onDelete: "cascade" }),
+  content: text("content")
+    .notNull()
+    .$defaultFn(() => "{}"),
+  tags: text("tags")
+    .notNull()
+    .$defaultFn(() => "[]"),
+  props: text("props")
+    .notNull()
+    .$defaultFn(() => "{}"),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
 });
 
 export const authSessions = sqliteTable("auth_sessions", {
@@ -104,7 +129,7 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   notes: many(notes),
 }));
 
-export const notesRelations = relations(notes, ({ one }) => ({
+export const notesRelations = relations(notes, ({ one, many }) => ({
   user: one(users, {
     fields: [notes.userId],
     references: [users.id],
@@ -116,6 +141,14 @@ export const notesRelations = relations(notes, ({ one }) => ({
   workspace: one(workspaces, {
     fields: [notes.workspaceId],
     references: [workspaces.id],
+  }),
+  posts: many(notesPosts),
+}));
+
+export const notesPostsRelations = relations(notesPosts, ({ one }) => ({
+  note: one(notes, {
+    fields: [notesPosts.noteId],
+    references: [notes.id],
   }),
 }));
 
@@ -137,6 +170,9 @@ export type NewCategory = InferInsertModel<typeof categories>;
 
 export type Note = InferSelectModel<typeof notes>;
 export type NewNote = InferInsertModel<typeof notes>;
+
+export type NotePost = InferSelectModel<typeof notesPosts>;
+export type NewNotePost = InferInsertModel<typeof notesPosts>;
 
 export type AuthSession = InferSelectModel<typeof authSessions>;
 export type NewAuthSession = InferInsertModel<typeof authSessions>;
