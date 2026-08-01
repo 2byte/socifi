@@ -1,0 +1,11 @@
+{
+  "extends": "../back/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "dist",
+    "types": ["bun-types"],
+    "noImplicitOverride": true,
+    "typeRoots": ["../back/node_modules/@types", "../back/node_modules"]
+  },
+  "include": ["**/*.ts", "../shared/**/*.ts"]
+}
