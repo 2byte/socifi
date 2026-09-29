@@ -138,4 +138,41 @@ export const noteRepository = {
   deletePost(id: number) {
     return db.delete(notesPosts).where(eq(notesPosts.id, id)).run();
   },
+
+  // ── NTPM Token Management ──────────────────────────────────
+
+  /**
+   * Set NTPM token for a post. Returns the updated post.
+   */
+  setNtpmToken(postId: number, token: string) {
+    return db
+      .update(notesPosts)
+      .set({ ntpmToken: token })
+      .where(eq(notesPosts.id, postId))
+      .returning()
+      .get();
+  },
+
+  /**
+   * Find a post by its NTPM token. Used for auth verification.
+   */
+  findPostByNtpmToken(token: string) {
+    return db
+      .select()
+      .from(notesPosts)
+      .where(eq(notesPosts.ntpmToken, token))
+      .get();
+  },
+
+  /**
+   * Get the NTPM token for a post.
+   */
+  getNtpmToken(postId: number) {
+    const post = db
+      .select({ ntpmToken: notesPosts.ntpmToken })
+      .from(notesPosts)
+      .where(eq(notesPosts.id, postId))
+      .get();
+    return post?.ntpmToken ?? null;
+  },
 };

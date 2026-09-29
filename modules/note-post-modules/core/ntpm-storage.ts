@@ -10,6 +10,8 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Database } from "bun:sqlite";
 import { eq, and, sql, count } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 // ── Shared table for all NTPM modules ────────────────────────
 
@@ -30,9 +32,12 @@ export const ntpmEntries = sqliteTable("ntpm_entries", {
 
 let dbInstance: ReturnType<typeof drizzle> | null = null;
 
+const NTPM_DB_PATH = "./database/ntpm-modules.db";
+
 function getDb() {
   if (!dbInstance) {
-    const sqlite = new Database("ntpm-modules.db");
+    mkdirSync(dirname(resolve(NTPM_DB_PATH)), { recursive: true });
+    const sqlite = new Database(NTPM_DB_PATH);
     dbInstance = drizzle(sqlite);
   }
   return dbInstance;

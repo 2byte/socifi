@@ -12,5 +12,5 @@
     "resolveJsonModule": true,
     "declaration": true
   },
-  "include": ["src/**/*.ts", "../shared/**/*.ts"]
+  "include": ["src/**/*.ts", "../shared/**/*.ts", "../modules/**/*.ts"]
 }

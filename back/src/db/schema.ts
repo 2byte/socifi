@@ -80,6 +80,7 @@ export const notesPosts = sqliteTable("notes_posts", {
   props: text("props")
     .notNull()
     .$defaultFn(() => "{}"),
+  ntpmToken: text("ntpm_token"),
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),

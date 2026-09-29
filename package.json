@@ -3,8 +3,15 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dev:all": "concurrently -n front,back -c cyan,green \"cd front && bun run dev\" \"cd back && bun run dev\"",
+    "dev:front": "cd front && bun run dev",
+    "dev:back": "cd back && bun run dev",
+    "prod": "cd front && bun run build && cd ../back && bun run start"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "concurrently": "^10.0.4"
   },
   "peerDependencies": {
     "typescript": "^5"

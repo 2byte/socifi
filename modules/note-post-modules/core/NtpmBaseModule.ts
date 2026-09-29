@@ -13,6 +13,7 @@ import { NtpmModuleStorage } from "./ntpm-storage";
 import { createNtpmWsRoute } from "./ntpm-ws-server";
 import type { NtpmWsContext } from "./ntpm-ws-server";
 import { ntpmEvents } from "./ntpm-events";
+import { verifyNtpmAuth } from "./ntpm-auth";
 
 export interface NtpmModuleConfig {
   /** Unique module slug (e.g. "data-vault", "cookie-keeper") */
@@ -60,6 +61,75 @@ export abstract class NtpmBaseModule<TPayload> {
   public abstract normalize(payload: TPayload): TPayload;
 
   // ── HTTP Server ────────────────────────────────────────────
+
+  /**
+   * Create Elysia plugin with dynamic :post_id param.
+   * Used by NtpmServiceManager to mount modules into the main app.
+   * Routes: POST/GET/PUT/DELETE /entries, GET /stats, + custom routes.
+   */
+  public createPlugin(): Elysia {
+    const slug = this.config.slug;
+    const mod = this;
+    const prefix = `/api/post/:post_id/internal/${slug}`;
+
+    const base = new Elysia({ prefix })
+      .post("/entries", ({ headers, params, body, set }: any) => {
+        const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
+        if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const errors = mod.validate(body as TPayload);
+        if (errors.length) {
+          set.status = 400;
+          return { errors };
+        }
+        const normalized = mod.normalize(body as TPayload);
+        const record = mod.storage.insert(auth.postId, normalized);
+        ntpmEvents.emit(`${slug}:entry:created`, auth.postId, record);
+        return record;
+      })
+      .get("/entries", ({ headers, params, set }: any) => {
+        const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
+        if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        return mod.storage.listByPostId(auth.postId);
+      })
+      .get("/entries/:id", ({ headers, params, set }: any) => {
+        const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
+        if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const record = mod.storage.findById((params as Record<string, string>).id);
+        if (!record) {
+          set.status = 404;
+          return { error: "Not found" };
+        }
+        return record;
+      })
+      .put("/entries/:id", ({ headers, params, body, set }: any) => {
+        const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
+        if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const updated = mod.storage.update((params as Record<string, string>).id, body as TPayload);
+        if (!updated) {
+          set.status = 404;
+          return { error: "Not found" };
+        }
+        return updated;
+      })
+      .delete("/entries/:id", ({ headers, params, set }: any) => {
+        const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
+        if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const deleted = mod.storage.delete((params as Record<string, string>).id);
+        if (!deleted) {
+          set.status = 404;
+          return { error: "Not found" };
+        }
+        ntpmEvents.emit(`${slug}:entry:deleted`, auth.postId, (params as Record<string, string>).id);
+        return { deleted: true };
+      })
+      .get("/stats", ({ headers, params, set }: any) => {
+        const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
+        if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        return mod.storage.stats(auth.postId);
+      });
+
+    return this.createCustomRoutes(base as Elysia, -1, (params) => Number(params.post_id)) as unknown as Elysia;
+  }
 
   /**
    * Create Elysia HTTP server for this module.
@@ -133,9 +203,10 @@ export abstract class NtpmBaseModule<TPayload> {
 
   /**
    * Override to add module-specific HTTP routes.
-   * Return the (possibly extended) Elysia app.
+   * Use `postIdExtractor` to get postId from request params in your handlers.
+   * Example: `.get("/search", ({ params }) => { const pid = postIdExtractor(params); ... })`
    */
-  protected createCustomRoutes(app: Elysia, postId: number): Elysia {
+  protected createCustomRoutes(app: Elysia, postId: number, postIdExtractor?: (params: Record<string, string>) => number): Elysia {
     return app;
   }
 

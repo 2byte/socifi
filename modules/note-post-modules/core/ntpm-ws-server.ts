@@ -13,9 +13,9 @@
  */
 
 import { Elysia } from "elysia";
-import ws from "@elysiajs/websocket";
 import { resolvePostAuth } from "../../../back/src/middleware/post-auth";
 import { ntpmEvents } from "./ntpm-events";
+import { verifyNtpmAuth } from "./ntpm-auth";
 
 export interface NtpmWsMessage {
   type: "subscribe" | "message" | "unsubscribe";
@@ -88,33 +88,52 @@ export function createNtpmWsRoute(
   }
 
   return new Elysia()
-    .use(ws())
     .ws(`/api/post/:post_id/internal/${slug}/ws`, {
       async open(ws: any) {
         const url = new URL(ws.data.request.url);
         const token = url.searchParams.get("token") ?? undefined;
         const postIdRaw = (ws.data.params as Record<string, string>).post_id;
+        const postId = Number(postIdRaw);
 
-        const auth = await resolvePostAuth(token, postIdRaw);
-
-        if (!auth) {
-          ws.send(JSON.stringify({ type: "error", message: "Unauthorized" }));
+        if (!Number.isFinite(postId) || postId <= 0) {
+          ws.send(JSON.stringify({ type: "error", message: "Invalid post id" }));
           ws.close();
           return;
         }
 
-        const clientId = `${auth.postId}:${auth.session.id}:${crypto.randomUUID()}`;
-        const key = String(auth.postId);
+        let session: { id: number; login: string } | null = null;
+        let isNtpmToken = false;
+
+        // Try NTPM post-specific token first
+        const authResult = verifyNtpmAuth(token ? `Bearer ${token}` : undefined, postIdRaw);
+        if (authResult) {
+          session = authResult.session;
+          isNtpmToken = authResult.isNtpmToken;
+        } else {
+          // Fall back to JWT auth
+          const jwtAuth = await resolvePostAuth(token, postIdRaw);
+          if (!jwtAuth) {
+            ws.send(JSON.stringify({ type: "error", message: "Unauthorized" }));
+            ws.close();
+            return;
+          }
+          session = jwtAuth.session;
+        }
+
+        const userId = session?.id ?? 0;
+        const login = session?.login ?? "ntpm-token";
+        const clientId = `${postId}:${userId}:${crypto.randomUUID()}`;
+        const key = String(postId);
 
         if (!clients.has(key)) clients.set(key, new Set());
         clients.get(key)!.add(ws);
 
         // Store auth info on ws for later use
-        (ws as any).__ntpmAuth = auth;
+        (ws as any).__ntpmAuth = { postId, session: { id: userId, login }, isNtpmToken };
         (ws as any).__ntpmClientId = clientId;
         (ws as any).__ntpmSubscribed = new Set<string>();
 
-        ws.send(JSON.stringify({ type: "connected", postId: auth.postId }));
+        ws.send(JSON.stringify({ type: "connected", postId }));
       },
 
       message(ws: any, raw: unknown) {

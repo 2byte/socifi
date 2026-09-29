@@ -11,6 +11,7 @@ import { NtpmBaseModule } from "../core/NtpmBaseModule";
 import type { NtpmWsContext } from "../core/ntpm-ws-server";
 import type { Elysia } from "elysia";
 import type { NtpmEntry } from "../core/useNtpmApi";
+import { verifyNtpmAuth } from "../core/ntpm-auth";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -116,12 +117,14 @@ export class NtpmDataVaultModule extends NtpmBaseModule<DataVaultPayload> {
 
   // ── Custom routes ────────────────────────────────────────
 
-  protected override createCustomRoutes(app: Elysia, postId: number): Elysia {
+  protected override createCustomRoutes(app: Elysia, postId: number, postIdExtractor?: (params: Record<string, string>) => number): Elysia {
     const mod = this;
     return app
       // Search by domain
-      .get("/search", ({ query: { domain } }) => {
-        const all = mod.storage.listByPostId(postId) as NtpmEntry<DataVaultPayload>[];
+      .get("/search", ({ headers, params, query: { domain }, set }: any) => {
+        const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
+        if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const all = mod.storage.listByPostId(auth.postId) as NtpmEntry<DataVaultPayload>[];
         if (!domain) return all;
         const lower = (domain as string).toLowerCase();
         return all.filter((r) => {
@@ -134,8 +137,10 @@ export class NtpmDataVaultModule extends NtpmBaseModule<DataVaultPayload> {
       })
 
       // Aggregated stats with cookie/credential counts
-      .get("/stats-detail", () => {
-        const all = mod.storage.listByPostId(postId) as NtpmEntry<DataVaultPayload>[];
+      .get("/stats-detail", ({ headers, params, set }: any) => {
+        const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
+        if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const all = mod.storage.listByPostId(auth.postId) as NtpmEntry<DataVaultPayload>[];
         const payloads = all.map((r) => r.payload);
         const totalCookies = payloads.reduce((s: number, p: DataVaultPayload) => s + p.cookies.length, 0);
         const totalCredentials = payloads.reduce((s: number, p: DataVaultPayload) => s + p.credentials.length, 0);

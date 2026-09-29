@@ -3,10 +3,11 @@ import { extname, join, normalize, resolve } from "node:path";
 import { config } from "../config";
 
 const SPA_INDEX_PATH = join(config.frontendDistDir, "index.html");
-const API_PREFIXES = ["/auth", "/users", "/health"];
+const API_PREFIXES = ["/auth", "/users", "/health", "/ntpm"];
 
 function isApiPath(path: string) {
-  return API_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return API_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
 }
 
 function resolveStaticPath(path: string) {
