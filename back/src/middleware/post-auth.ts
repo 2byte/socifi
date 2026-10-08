@@ -12,6 +12,7 @@
 import { Elysia } from "elysia";
 import { auth, resolveSession } from "./auth";
 import { noteRepository } from "../repositories/note.repository";
+import { verifyAccessToken } from "../lib/jwt";
 
 export const postAuth = new Elysia()
   .use(auth)
@@ -56,38 +57,14 @@ export async function resolvePostAuth(
   const postId = Number(postIdRaw);
   if (!Number.isFinite(postId) || postId <= 0) return null;
 
-  // We need to verify the JWT manually for WS
-  // Import config and create a temporary JWT verifier
-  const { config } = await import("../config");
-  const { jwt } = await import("@elysiajs/jwt");
+  // WS cannot send headers, so the token arrives in the query string and is
+  // verified here against the signing secret.
+  const session = verifyAccessToken(token);
+  if (!session) return null;
 
-  // Create a minimal verifier
-  const jwtInstance = jwt({ name: "wsAuth", secret: config.jwtSecret });
-  // We can't use .use() outside Elysia context, so we verify manually
-  try {
-    // Decode JWT payload (Elysia JWT uses jose under the hood)
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
+  // Verify user owns the post
+  const post = noteRepository.findPostByIdForUser(postId, session.id);
+  if (!post) return null;
 
-    const payload = JSON.parse(atob(parts[1]));
-
-    if (typeof payload.id !== "number" || typeof payload.login !== "string") {
-      return null;
-    }
-
-    // Check expiration
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      return null;
-    }
-
-    const session = { id: payload.id, login: payload.login };
-
-    // Verify user owns the post
-    const post = noteRepository.findPostByIdForUser(postId, session.id);
-    if (!post) return null;
-
-    return { session, postId };
-  } catch {
-    return null;
-  }
+  return { session, postId };
 }

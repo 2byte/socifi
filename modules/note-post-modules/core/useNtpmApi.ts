@@ -21,8 +21,27 @@ export interface NtpmStats {
   lastUpdated: string | null;
 }
 
-export function useNtpmApi<TPayload>(postId: number, moduleSlug: string) {
-  const apiBase = `/api/post/${postId}/internal/${moduleSlug}`;
+export interface NtpmApiOptions {
+  /** Access token or post NTPM token, sent as `Authorization: Bearer`. */
+  token?: string;
+  /** API root the app is served behind; `/api` unless configured otherwise. */
+  apiRoot?: string;
+}
+
+export function useNtpmApi<TPayload>(
+  postId: number,
+  moduleSlug: string,
+  options: NtpmApiOptions = {},
+) {
+  const apiBase = `${options.apiRoot ?? "/api"}/post/${postId}/internal/${moduleSlug}`;
+
+  /** Headers every request carries; JSON content type is added per call. */
+  function headers(json = false): HeadersInit {
+    const h: Record<string, string> = {};
+    if (options.token) h.Authorization = `Bearer ${options.token}`;
+    if (json) h["Content-Type"] = "application/json";
+    return h;
+  }
   const entries: Ref<NtpmEntry<TPayload>[]> = ref([]);
   const stats: Ref<NtpmStats> = ref({ totalEntries: 0, lastUpdated: null });
   const loading = ref(false);
@@ -34,7 +53,7 @@ export function useNtpmApi<TPayload>(postId: number, moduleSlug: string) {
     loading.value = true;
     error.value = null;
     try {
-      entries.value = await fetch(`${apiBase}/entries`).then((r) => r.json());
+      entries.value = await fetch(`${apiBase}/entries`, { headers: headers() }).then((r) => r.json());
     } catch (e) {
       error.value = String(e);
     } finally {
@@ -44,7 +63,7 @@ export function useNtpmApi<TPayload>(postId: number, moduleSlug: string) {
 
   async function loadStats(): Promise<void> {
     try {
-      stats.value = await fetch(`${apiBase}/stats`).then((r) => r.json());
+      stats.value = await fetch(`${apiBase}/stats`, { headers: headers() }).then((r) => r.json());
     } catch (e) {
       error.value = String(e);
     }
@@ -60,7 +79,7 @@ export function useNtpmApi<TPayload>(postId: number, moduleSlug: string) {
     try {
       const res = await fetch(`${apiBase}/entries`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: headers(true),
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -80,7 +99,7 @@ export function useNtpmApi<TPayload>(postId: number, moduleSlug: string) {
     try {
       const res = await fetch(`${apiBase}/entries/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: headers(true),
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -97,7 +116,7 @@ export function useNtpmApi<TPayload>(postId: number, moduleSlug: string) {
 
   async function deleteEntry(id: string): Promise<boolean> {
     try {
-      const res = await fetch(`${apiBase}/entries/${id}`, { method: "DELETE" });
+      const res = await fetch(`${apiBase}/entries/${id}`, { method: "DELETE", headers: headers() });
       if (!res.ok) {
         error.value = await res.text();
         return false;

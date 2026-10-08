@@ -70,7 +70,7 @@ export abstract class NtpmBaseModule<TPayload> {
   public createPlugin(): Elysia {
     const slug = this.config.slug;
     const mod = this;
-    const prefix = `/api/post/:post_id/internal/${slug}`;
+    const prefix = `/post/:post_id/internal/${slug}`;
 
     const base = new Elysia({ prefix })
       .post("/entries", ({ headers, params, body, set }: any) => {
@@ -94,7 +94,7 @@ export abstract class NtpmBaseModule<TPayload> {
       .get("/entries/:id", ({ headers, params, set }: any) => {
         const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
         if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
-        const record = mod.storage.findById((params as Record<string, string>).id);
+        const record = mod.storage.findById((params as Record<string, string>).id, auth.postId);
         if (!record) {
           set.status = 404;
           return { error: "Not found" };
@@ -104,17 +104,27 @@ export abstract class NtpmBaseModule<TPayload> {
       .put("/entries/:id", ({ headers, params, body, set }: any) => {
         const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
         if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
-        const updated = mod.storage.update((params as Record<string, string>).id, body as TPayload);
+        const errors = mod.validate(body as TPayload);
+        if (errors.length) {
+          set.status = 400;
+          return { errors };
+        }
+        const updated = mod.storage.update(
+          (params as Record<string, string>).id,
+          auth.postId,
+          mod.normalize(body as TPayload),
+        );
         if (!updated) {
           set.status = 404;
           return { error: "Not found" };
         }
+        ntpmEvents.emit(`${slug}:entry:updated`, auth.postId, updated);
         return updated;
       })
       .delete("/entries/:id", ({ headers, params, set }: any) => {
         const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
         if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
-        const deleted = mod.storage.delete((params as Record<string, string>).id);
+        const deleted = mod.storage.delete((params as Record<string, string>).id, auth.postId);
         if (!deleted) {
           set.status = 404;
           return { error: "Not found" };
@@ -139,7 +149,7 @@ export abstract class NtpmBaseModule<TPayload> {
    * Override `createCustomRoutes()` to add module-specific endpoints.
    */
   public createServer(postId: number): Elysia {
-    const prefix = `/api/post/${postId}/internal/${this.config.slug}`;
+    const prefix = `/post/${postId}/internal/${this.config.slug}`;
     const mod = this;
 
     const base = new Elysia({ prefix })
@@ -163,7 +173,7 @@ export abstract class NtpmBaseModule<TPayload> {
 
       // Get single entry
       .get("/entries/:id", ({ params: { id }, set }) => {
-        const record = mod.storage.findById(id);
+        const record = mod.storage.findById(id, postId);
         if (!record) {
           set.status = 404;
           return { error: "Not found" };
@@ -173,17 +183,23 @@ export abstract class NtpmBaseModule<TPayload> {
 
       // Update entry
       .put("/entries/:id", ({ params: { id }, body, set }) => {
-        const updated = mod.storage.update(id, body as TPayload);
+        const errors = mod.validate(body as TPayload);
+        if (errors.length) {
+          set.status = 400;
+          return { errors };
+        }
+        const updated = mod.storage.update(id, postId, mod.normalize(body as TPayload));
         if (!updated) {
           set.status = 404;
           return { error: "Not found" };
         }
+        ntpmEvents.emit(`${mod.config.slug}:entry:updated`, postId, updated);
         return updated;
       })
 
       // Delete entry
       .delete("/entries/:id", ({ params: { id }, set }) => {
-        const deleted = mod.storage.delete(id);
+        const deleted = mod.storage.delete(id, postId);
         if (!deleted) {
           set.status = 404;
           return { error: "Not found" };
@@ -234,7 +250,7 @@ export abstract class NtpmBaseModule<TPayload> {
 
   /**
    * Create WebSocket route for this module.
-   * Returns an Elysia app with WS endpoint at /api/post/:post_id/internal/:slug/ws
+   * Returns an Elysia app with WS endpoint at /post/:post_id/internal/:slug/ws (public: /api/post/..., the /api prefix is stripped by the proxy)
    */
   public createWsServer(): Elysia {
     const channels = this.createWsChannels();

@@ -1,2 +1,4 @@
 socifi.sqlite
+socifi.sqlite-shm
+socifi.sqlite-wal
 ntpm-modules.db

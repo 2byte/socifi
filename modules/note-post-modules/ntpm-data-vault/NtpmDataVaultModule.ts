@@ -12,42 +12,23 @@ import type { NtpmWsContext } from "../core/ntpm-ws-server";
 import type { Elysia } from "elysia";
 import type { NtpmEntry } from "../core/useNtpmApi";
 import { verifyNtpmAuth } from "../core/ntpm-auth";
+import { groupByDomain } from "./data-vault.shared";
+import type {
+  CookieEntry,
+  CredentialEntry,
+  DataVaultPayload,
+} from "./data-vault.shared";
 
 // ── Types ────────────────────────────────────────────────────
+// Defined in ./data-vault.shared so UI pages can use them without loading this
+// server-side class.
 
-export interface DeviceMeta {
-  userAgent: string;
-  platform: string;
-  language: string;
-  screenResolution?: string;
-  timezone?: string;
-  timestamp: string;
-}
-
-export interface CookieEntry {
-  domain: string;
-  name: string;
-  value: string;
-  path: string;
-  expires?: string;
-  httpOnly: boolean;
-  secure: boolean;
-  sameSite?: "Strict" | "Lax" | "None";
-}
-
-export interface CredentialEntry {
-  domain: string;
-  username: string;
-  password: string;
-  label?: string;
-  lastUsed?: string;
-}
-
-export interface DataVaultPayload {
-  cookies: CookieEntry[];
-  credentials: CredentialEntry[];
-  meta: DeviceMeta;
-}
+export type {
+  CookieEntry,
+  CredentialEntry,
+  DataVaultPayload,
+  DeviceMeta,
+} from "./data-vault.shared";
 
 // ── Module ───────────────────────────────────────────────────
 
@@ -197,22 +178,5 @@ export class NtpmDataVaultModule extends NtpmBaseModule<DataVaultPayload> {
 
   // ── Static helpers (for frontend grouping) ───────────────
 
-  public static groupByDomain(payload: DataVaultPayload): Record<
-    string,
-    { cookies: CookieEntry[]; credentials: CredentialEntry[] }
-  > {
-    const groups: Record<string, { cookies: CookieEntry[]; credentials: CredentialEntry[] }> = {};
-
-    for (const cookie of payload.cookies) {
-      if (!groups[cookie.domain]) groups[cookie.domain] = { cookies: [], credentials: [] };
-      groups[cookie.domain].cookies.push(cookie);
-    }
-
-    for (const cred of payload.credentials) {
-      if (!groups[cred.domain]) groups[cred.domain] = { cookies: [], credentials: [] };
-      groups[cred.domain].credentials.push(cred);
-    }
-
-    return groups;
-  }
+  public static groupByDomain = groupByDomain;
 }

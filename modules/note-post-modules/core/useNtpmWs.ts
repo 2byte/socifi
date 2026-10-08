@@ -10,6 +10,8 @@ export interface NtpmWsOptions {
   postId: number;
   moduleSlug: string;
   token: string;
+  /** API root the app is served behind; `/api` unless configured otherwise. */
+  apiRoot?: string;
 }
 
 export interface NtpmWsMessage {
@@ -20,7 +22,7 @@ export interface NtpmWsMessage {
 }
 
 export function useNtpmWs(options: NtpmWsOptions) {
-  const { postId, moduleSlug, token } = options;
+  const { postId, moduleSlug, token, apiRoot = "/api" } = options;
 
   const connected = ref(false);
   const error = ref<string | null>(null);
@@ -32,7 +34,7 @@ export function useNtpmWs(options: NtpmWsOptions) {
   function connect() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
-    const url = `${protocol}//${host}/api/post/${postId}/internal/${moduleSlug}/ws?token=${encodeURIComponent(token)}`;
+    const url = `${protocol}//${host}${apiRoot}/post/${postId}/internal/${moduleSlug}/ws?token=${encodeURIComponent(token)}`;
 
     const ws = new WebSocket(url);
     socket.value = ws;

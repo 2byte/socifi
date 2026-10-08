@@ -51,6 +51,19 @@ export class NtpmModuleStorage {
   }
 
   /**
+   * Row filter for a single entry. An id alone is not enough: it must belong to
+   * this module and this post, or a token for one post could read, rewrite or
+   * delete the entries of another.
+   */
+  private scope(id: string, postId: number) {
+    return and(
+      eq(ntpmEntries.id, id),
+      eq(ntpmEntries.moduleSlug, this.slug),
+      eq(ntpmEntries.postId, postId),
+    );
+  }
+
+  /**
    * Create table if not exists.
    */
   public migrate(): void {
@@ -103,12 +116,12 @@ export class NtpmModuleStorage {
   /**
    * Get single entry by id.
    */
-  public findById(id: string) {
+  public findById(id: string, postId: number) {
     const db = getDb();
     const row = db
       .select()
       .from(ntpmEntries)
-      .where(eq(ntpmEntries.id, id))
+      .where(this.scope(id, postId))
       .get();
     if (!row) return null;
     return { ...row, payload: JSON.parse(row.payload) };
@@ -117,14 +130,14 @@ export class NtpmModuleStorage {
   /**
    * Update an entry's payload.
    */
-  public update<T>(id: string, payload: T) {
+  public update<T>(id: string, postId: number, payload: T) {
     const db = getDb();
     const now = new Date().toISOString();
     // .run() returns { changes: number } at runtime but types say void
     const result = db
       .update(ntpmEntries)
       .set({ payload: JSON.stringify(payload), updatedAt: now })
-      .where(eq(ntpmEntries.id, id))
+      .where(this.scope(id, postId))
       .run() as unknown as { changes: number };
     if (result.changes === 0) return null;
     return { id, moduleSlug: this.slug, payload, updatedAt: now };
@@ -133,10 +146,10 @@ export class NtpmModuleStorage {
   /**
    * Delete an entry.
    */
-  public delete(id: string): boolean {
+  public delete(id: string, postId: number): boolean {
     const db = getDb();
     // .run() returns { changes: number } at runtime but types say void
-    const result = db.delete(ntpmEntries).where(eq(ntpmEntries.id, id)).run() as unknown as { changes: number };
+    const result = db.delete(ntpmEntries).where(this.scope(id, postId)).run() as unknown as { changes: number };
     return result.changes > 0;
   }
 

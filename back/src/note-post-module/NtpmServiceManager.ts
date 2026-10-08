@@ -137,6 +137,17 @@ export class NtpmServiceManager {
   }
 
   /**
+   * Describe every loaded module (slug, display name, version) for the UI.
+   */
+  public static getLoadedInfo() {
+    return [...NtpmServiceManager.modules.values()].map((m) => ({
+      slug: m.config.slug,
+      name: m.config.name,
+      version: m.config.version,
+    }));
+  }
+
+  /**
    * Get all loaded module slugs.
    */
   public static getLoadedSlugs(): string[] {

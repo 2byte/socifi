@@ -65,6 +65,17 @@ export function createNtpmWsRoute(
   // Track connected clients per post
   const clients = new Map<string, Set<any>>();
 
+  // Per-connection state. Elysia hands each handler a fresh wrapper object, so
+  // anything stashed on `ws` in `open` is gone by `message`; the underlying
+  // socket (`ws.raw`) is the one object that stays the same.
+  interface Conn {
+    auth: { postId: number; session: { id: number; login: string }; isNtpmToken: boolean };
+    subscribed: Set<string>;
+    send: (payload: string) => void;
+  }
+  const conns = new Map<unknown, Conn>();
+  const connKey = (ws: any) => ws.raw ?? ws;
+
   // Helper: broadcast to all subscribed clients of a post
   function broadcastToPost(postId: number, channel: string, data: unknown) {
     const key = String(postId);
@@ -72,8 +83,9 @@ export function createNtpmWsRoute(
     if (!postClients) return;
     const payload = JSON.stringify({ type: "message", channel, data });
     for (const client of postClients) {
-      if ((client as any).__ntpmSubscribed?.has(channel)) {
-        client.send(payload);
+      const conn = conns.get(client);
+      if (conn?.subscribed.has(channel)) {
+        conn.send(payload);
       }
     }
   }
@@ -88,7 +100,7 @@ export function createNtpmWsRoute(
   }
 
   return new Elysia()
-    .ws(`/api/post/:post_id/internal/${slug}/ws`, {
+    .ws(`/post/:post_id/internal/${slug}/ws`, {
       async open(ws: any) {
         const url = new URL(ws.data.request.url);
         const token = url.searchParams.get("token") ?? undefined;
@@ -126,29 +138,33 @@ export function createNtpmWsRoute(
         const key = String(postId);
 
         if (!clients.has(key)) clients.set(key, new Set());
-        clients.get(key)!.add(ws);
+        clients.get(key)!.add(connKey(ws));
 
-        // Store auth info on ws for later use
-        (ws as any).__ntpmAuth = { postId, session: { id: userId, login }, isNtpmToken };
-        (ws as any).__ntpmClientId = clientId;
-        (ws as any).__ntpmSubscribed = new Set<string>();
+        conns.set(connKey(ws), {
+          auth: { postId, session: { id: userId, login }, isNtpmToken },
+          subscribed: new Set<string>(),
+          send: (payload) => ws.send(payload),
+        });
+        void clientId;
 
         ws.send(JSON.stringify({ type: "connected", postId }));
       },
 
       message(ws: any, raw: unknown) {
-        const auth = (ws as any).__ntpmAuth;
-        if (!auth) return;
+        const conn = conns.get(connKey(ws));
+        if (!conn) return;
+        const { auth } = conn;
 
+        // Elysia parses JSON frames for us; fall back to parsing text ones.
         let msg: NtpmWsMessage;
         try {
-          msg = JSON.parse(String(raw));
+          msg = typeof raw === "object" && raw !== null ? (raw as NtpmWsMessage) : JSON.parse(String(raw));
         } catch {
           ws.send(JSON.stringify({ type: "error", message: "Invalid JSON" }));
           return;
         }
 
-        const subscribed: Set<string> = (ws as any).__ntpmSubscribed;
+        const subscribed = conn.subscribed;
 
         if (msg.type === "subscribe") {
           if (!channelMap.has(msg.channel)) {
@@ -183,15 +199,7 @@ export function createNtpmWsRoute(
               ws.send(JSON.stringify({ type: "message", channel, data }));
             },
             broadcast: (channel: string, data: unknown) => {
-              const key = String(auth.postId);
-              const postClients = clients.get(key);
-              if (!postClients) return;
-              const payload = JSON.stringify({ type: "message", channel, data });
-              for (const client of postClients) {
-                if ((client as any).__ntpmSubscribed?.has(channel)) {
-                  client.send(payload);
-                }
-              }
+              broadcastToPost(auth.postId, channel, data);
             },
           };
 
@@ -200,11 +208,12 @@ export function createNtpmWsRoute(
       },
 
       close(ws: any) {
-        const auth = (ws as any).__ntpmAuth;
-        if (!auth) return;
-        const key = String(auth.postId);
-        clients.get(key)?.delete(ws);
+        const conn = conns.get(connKey(ws));
+        if (!conn) return;
+        const key = String(conn.auth.postId);
+        clients.get(key)?.delete(connKey(ws));
         if (clients.get(key)?.size === 0) clients.delete(key);
+        conns.delete(connKey(ws));
       },
     }) as unknown as Elysia;
 }

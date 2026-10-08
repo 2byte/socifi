@@ -52,8 +52,8 @@
 import { ref, computed, onMounted } from "vue";
 import { useNtpmApi } from "../../core/useNtpmApi";
 import { useNtpmWs } from "../../core/useNtpmWs";
-import type { DataVaultPayload, CookieEntry, CredentialEntry } from "../NtpmDataVaultModule";
-import { NtpmDataVaultModule } from "../NtpmDataVaultModule";
+import { groupByDomain } from "../data-vault.shared";
+import type { DataVaultPayload, CookieEntry, CredentialEntry } from "../data-vault.shared";
 import EntryList from "./EntryList.vue";
 
 interface DetailStats {
@@ -64,15 +64,21 @@ interface DetailStats {
   lastUpdated: string | null;
 }
 
-const props = defineProps<{ postId: number }>();
+const props = defineProps<{ postId: number; token: string; apiRoot?: string }>();
 
 const { entries, stats, statsLabel, loadAll, deleteEntry } =
-  useNtpmApi<DataVaultPayload>(props.postId, "data-vault");
+  useNtpmApi<DataVaultPayload>(props.postId, "data-vault", {
+    token: props.token,
+    apiRoot: props.apiRoot,
+  });
 
 // WebSocket for real-time updates
-// Token should come from auth store or cookie
-const token = localStorage.getItem("access_token") ?? "";
-const ws = useNtpmWs({ postId: props.postId, moduleSlug: "data-vault", token });
+const ws = useNtpmWs({
+  postId: props.postId,
+  moduleSlug: "data-vault",
+  token: props.token,
+  apiRoot: props.apiRoot,
+});
 
 ws.onChannel("vault:new", () => refresh());
 ws.onChannel("vault:deleted", () => refresh());
@@ -99,14 +105,17 @@ const grouped = computed(() => {
     credentials: all.flatMap((p) => p.credentials),
     meta: all[0]?.meta ?? { userAgent: "", platform: "", language: "", timestamp: "" },
   };
-  return NtpmDataVaultModule.groupByDomain(merged);
+  return groupByDomain(merged);
 });
 
 const domains = computed(() => Object.keys(grouped.value).sort());
 
 async function loadDetailStats() {
   try {
-    const res = await fetch(`/api/post/${props.postId}/internal/data-vault/stats-detail`);
+    const res = await fetch(
+      `${props.apiRoot ?? "/api"}/post/${props.postId}/internal/data-vault/stats-detail`,
+      { headers: { Authorization: `Bearer ${props.token}` } },
+    );
     detailStats.value = await res.json();
   } catch { /* ignore */ }
 }

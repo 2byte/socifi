@@ -11,6 +11,7 @@
  */
 
 import { noteRepository } from "../../../back/src/repositories/note.repository";
+import { verifyAccessToken } from "../../../back/src/lib/jwt";
 
 export interface NtpmAuthResult {
   session: { id: number; login: string } | null;
@@ -46,32 +47,12 @@ export function verifyNtpmAuth(
     return { session: null, postId, isNtpmToken: true };
   }
 
-  // Mode 2: JWT user token
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
+  // Mode 2: JWT user token — signature checked, then ownership of the post.
+  const session = verifyAccessToken(token);
+  if (!session) return null;
 
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
+  const userPost = noteRepository.findPostByIdForUser(postId, session.id);
+  if (!userPost) return null;
 
-    if (typeof payload.id !== "number" || typeof payload.login !== "string") {
-      return null;
-    }
-
-    // Check expiration
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      return null;
-    }
-
-    // Verify user owns the note that this post belongs to
-    const userPost = noteRepository.findPostByIdForUser(postId, payload.id);
-    if (!userPost) return null;
-
-    return {
-      session: { id: payload.id, login: payload.login },
-      postId,
-      isNtpmToken: false,
-    };
-  } catch {
-    return null;
-  }
+  return { session, postId, isNtpmToken: false };
 }

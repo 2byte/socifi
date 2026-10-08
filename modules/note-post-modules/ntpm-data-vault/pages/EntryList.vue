@@ -40,7 +40,7 @@
 
 <script lang="ts" setup>
 import { ref } from "vue";
-import type { CookieEntry, CredentialEntry } from "../NtpmDataVaultModule";
+import type { CookieEntry, CredentialEntry } from "../data-vault.shared";
 
 defineProps<{
   entries: { cookies: CookieEntry[]; credentials: CredentialEntry[] };

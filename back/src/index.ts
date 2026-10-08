@@ -21,7 +21,7 @@ const app = new Elysia()
       origin: config.frontendUrl,
       credentials: true,
       allowedHeaders: ["Content-Type", "Authorization"],
-      methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     }),
   )
   .use(auth)

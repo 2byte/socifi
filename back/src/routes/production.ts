@@ -3,7 +3,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { config } from "../config";
 
 const SPA_INDEX_PATH = join(config.frontendDistDir, "index.html");
-const API_PREFIXES = ["/auth", "/users", "/health", "/ntpm"];
+const API_PREFIXES = ["/auth", "/users", "/health", "/ntpm", "/post"];
 
 function isApiPath(path: string) {
   const normalized = path.startsWith("/") ? path : `/${path}`;
@@ -22,6 +22,13 @@ function resolveStaticPath(path: string) {
   return resolvedPath;
 }
 
+// Elysia drops the Content-Type Bun derives for a bare `new Response(file)`,
+// and browsers refuse module scripts that arrive without one — the app would
+// load as a blank page — so the type is set explicitly.
+function fileResponse(file: ReturnType<typeof Bun.file>) {
+  return new Response(file, { headers: { "Content-Type": file.type } });
+}
+
 async function serveSpa(path: string, set: { status?: number | string }) {
   if (isApiPath(path)) {
     set.status = 404;
@@ -38,7 +45,7 @@ async function serveSpa(path: string, set: { status?: number | string }) {
   const staticFile = Bun.file(staticFilePath);
 
   if (await staticFile.exists()) {
-    return new Response(staticFile);
+    return fileResponse(staticFile);
   }
 
   if (extname(path)) {
@@ -55,7 +62,7 @@ async function serveSpa(path: string, set: { status?: number | string }) {
     };
   }
 
-  return new Response(indexFile);
+  return fileResponse(indexFile);
 }
 
 export const productionRoutes = new Elysia()
