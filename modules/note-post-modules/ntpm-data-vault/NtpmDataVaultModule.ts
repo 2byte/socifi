@@ -105,6 +105,8 @@ export class NtpmDataVaultModule extends NtpmBaseModule<DataVaultPayload> {
       .get("/search", ({ headers, params, query: { domain }, set }: any) => {
         const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
         if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const denied = mod.deny(auth, "read", set);
+        if (denied) return denied;
         const all = mod.storage.listByPostId(auth.postId) as NtpmEntry<DataVaultPayload>[];
         if (!domain) return all;
         const lower = (domain as string).toLowerCase();
@@ -121,6 +123,8 @@ export class NtpmDataVaultModule extends NtpmBaseModule<DataVaultPayload> {
       .get("/stats-detail", ({ headers, params, set }: any) => {
         const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
         if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const denied = mod.deny(auth, "read", set);
+        if (denied) return denied;
         const all = mod.storage.listByPostId(auth.postId) as NtpmEntry<DataVaultPayload>[];
         const payloads = all.map((r) => r.payload);
         const totalCookies = payloads.reduce((s: number, p: DataVaultPayload) => s + p.cookies.length, 0);

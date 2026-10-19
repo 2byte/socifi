@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Deploys socifi to the production server (pw.socifi.io).
+# Deploys socifi to the production server (pw.oopz.pro).
 #
 #   bash deploy/deploy.sh
 #
@@ -31,7 +31,7 @@ SSH_KEY="${PROD_SERVER_KEY_PATH:-$(read_env PROD_SERVER_KEY_PATH)}"
 SSH_KEY="${SSH_KEY//\//}"
 REMOTE_DIR="${PROD_APP_DIR:-/var/www/pw.socifi.io/app}"
 PM2_APP="${PROD_PM2_APP:-socifi}"
-DOMAIN="${PROD_DOMAIN:-pw.socifi.io}"
+DOMAIN="${PROD_DOMAIN:-pw.oopz.pro}"
 PORT="${PROD_PORT:-3075}"
 BUN_DIR="$(dirname "${PROD_BUN_BIN:-/root/.bun/bin/bun}")"
 
@@ -54,6 +54,7 @@ tar czf - \
   --exclude='back/dev-tasks' \
   --exclude='back/database/*.sqlite*' \
   --exclude='back/database/*.db*' \
+  --exclude='back/database/uploads' \
   --exclude='modules/installed' \
   --exclude='.env' \
   -C "${PROJECT_DIR}" back modules shared front/dist/spa deploy/ecosystem.config.cjs \
@@ -75,6 +76,9 @@ echo "==> Installing dependencies, migrating, restarting"
       echo \"JWT_REFRESH_SECRET=\$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')\"
     } > back/.env
   fi
+
+  # The public URL is part of the server config; keep it in step with the domain.
+  sed -i 's|^FRONTEND_URL=.*|FRONTEND_URL=https://${DOMAIN}|' back/.env
 
   (cd back && bun install --production --frozen-lockfile)
   (cd modules && bun install --production --frozen-lockfile)

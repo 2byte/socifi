@@ -27,4 +27,7 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || "change-me-in-production",
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || "change-me-in-production",
   cookieSecure: parseBoolean(process.env.COOKIE_SECURE, false),
+  // Attachments live next to the databases, which a deploy never overwrites.
+  uploadsDir: process.env.UPLOADS_DIR || "./database/uploads",
+  maxUploadBytes: parseNumber(process.env.MAX_UPLOAD_BYTES, 25 * 1024 * 1024),
 };

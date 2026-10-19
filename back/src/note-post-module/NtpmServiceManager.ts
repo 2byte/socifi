@@ -11,7 +11,12 @@ import { readdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 
 interface NtpmModuleInstance {
-  config: { slug: string; name: string; version: string };
+  config: {
+    slug: string;
+    name: string;
+    version: string;
+    guests?: { read: boolean; write: boolean };
+  };
   onInit(): Promise<void>;
   onDestroy(): Promise<void>;
   createPlugin(): Elysia;
@@ -144,6 +149,7 @@ export class NtpmServiceManager {
       slug: m.config.slug,
       name: m.config.name,
       version: m.config.version,
+      guests: m.config.guests ?? { read: false, write: false },
     }));
   }
 

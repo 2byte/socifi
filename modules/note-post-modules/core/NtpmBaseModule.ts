@@ -13,7 +13,8 @@ import { NtpmModuleStorage } from "./ntpm-storage";
 import { createNtpmWsRoute } from "./ntpm-ws-server";
 import type { NtpmWsContext } from "./ntpm-ws-server";
 import { ntpmEvents } from "./ntpm-events";
-import { verifyNtpmAuth } from "./ntpm-auth";
+import { verifyNtpmAuth, type NtpmAuthResult } from "./ntpm-auth";
+import { isAllowed, NO_GUEST_ACCESS, type NtpmAction, type NtpmGuestPolicy } from "./ntpm-guest";
 
 export interface NtpmModuleConfig {
   /** Unique module slug (e.g. "data-vault", "cookie-keeper") */
@@ -22,6 +23,12 @@ export interface NtpmModuleConfig {
   name: string;
   /** Module version */
   version: string;
+  /**
+   * What the module supports for guests (people with a public link). Leave it
+   * out and guests get nothing: a module opts in to being seen or touched by
+   * strangers, it is never exposed by accident. See `ntpm-guest.ts`.
+   */
+  guests?: NtpmGuestPolicy;
 }
 
 export abstract class NtpmBaseModule<TPayload> {
@@ -60,6 +67,32 @@ export abstract class NtpmBaseModule<TPayload> {
    */
   public abstract normalize(payload: TPayload): TPayload;
 
+  // ── Access ─────────────────────────────────────────────────
+
+  /** The module's guest capability; closed unless the module declared one. */
+  public get guestPolicy(): NtpmGuestPolicy {
+    return this.config.guests ?? NO_GUEST_ACCESS;
+  }
+
+  /** Whether the caller may perform `action`. Owners always may; guests are limited. */
+  public allows(auth: NtpmAuthResult, action: NtpmAction): boolean {
+    return isAllowed(auth.role, this.guestPolicy, auth.guestWrite, action);
+  }
+
+  /**
+   * Call after authenticating, before doing the work: returns the 403 body (and
+   * sets the status) when the caller may not `action`, otherwise `null`.
+   * Custom routes use it the same way the base routes do.
+   */
+  public deny(auth: NtpmAuthResult, action: NtpmAction, set: { status?: unknown }): { error: string } | null {
+    if (this.allows(auth, action)) {
+      return null;
+    }
+
+    set.status = 403;
+    return { error: auth.role === "guest" ? "Not available to guests" : "Forbidden" };
+  }
+
   // ── HTTP Server ────────────────────────────────────────────
 
   /**
@@ -76,6 +109,8 @@ export abstract class NtpmBaseModule<TPayload> {
       .post("/entries", ({ headers, params, body, set }: any) => {
         const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
         if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const denied = mod.deny(auth, "write", set);
+        if (denied) return denied;
         const errors = mod.validate(body as TPayload);
         if (errors.length) {
           set.status = 400;
@@ -89,11 +124,15 @@ export abstract class NtpmBaseModule<TPayload> {
       .get("/entries", ({ headers, params, set }: any) => {
         const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
         if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const denied = mod.deny(auth, "read", set);
+        if (denied) return denied;
         return mod.storage.listByPostId(auth.postId);
       })
       .get("/entries/:id", ({ headers, params, set }: any) => {
         const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
         if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const denied = mod.deny(auth, "read", set);
+        if (denied) return denied;
         const record = mod.storage.findById((params as Record<string, string>).id, auth.postId);
         if (!record) {
           set.status = 404;
@@ -104,6 +143,8 @@ export abstract class NtpmBaseModule<TPayload> {
       .put("/entries/:id", ({ headers, params, body, set }: any) => {
         const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
         if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const denied = mod.deny(auth, "write", set);
+        if (denied) return denied;
         const errors = mod.validate(body as TPayload);
         if (errors.length) {
           set.status = 400;
@@ -124,6 +165,8 @@ export abstract class NtpmBaseModule<TPayload> {
       .delete("/entries/:id", ({ headers, params, set }: any) => {
         const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
         if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const denied = mod.deny(auth, "write", set);
+        if (denied) return denied;
         const deleted = mod.storage.delete((params as Record<string, string>).id, auth.postId);
         if (!deleted) {
           set.status = 404;
@@ -135,6 +178,8 @@ export abstract class NtpmBaseModule<TPayload> {
       .get("/stats", ({ headers, params, set }: any) => {
         const auth = verifyNtpmAuth(headers?.authorization, (params as Record<string, string>).post_id);
         if (!auth) { set.status = 401; return { error: "Unauthorized" }; }
+        const denied = mod.deny(auth, "read", set);
+        if (denied) return denied;
         return mod.storage.stats(auth.postId);
       });
 
@@ -256,6 +301,6 @@ export abstract class NtpmBaseModule<TPayload> {
     const channels = this.createWsChannels();
     const eventMappings = this.createWsEventMappings();
     if (!channels.length && !eventMappings.length) return new Elysia();
-    return createNtpmWsRoute(this.config.slug, channels, eventMappings) as unknown as Elysia;
+    return createNtpmWsRoute(this.config.slug, channels, eventMappings, this.guestPolicy) as unknown as Elysia;
   }
 }

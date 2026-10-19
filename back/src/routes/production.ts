@@ -3,7 +3,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { config } from "../config";
 
 const SPA_INDEX_PATH = join(config.frontendDistDir, "index.html");
-const API_PREFIXES = ["/auth", "/users", "/health", "/ntpm", "/post"];
+const API_PREFIXES = ["/auth", "/users", "/health", "/ntpm", "/post", "/public", "/shares", "/attachments"];
 
 function isApiPath(path: string) {
   const normalized = path.startsWith("/") ? path : `/${path}`;

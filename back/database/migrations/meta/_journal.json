@@ -15,6 +15,27 @@
       "when": 1791477955989,
       "tag": "0001_notes_posts_ntpm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792264801377,
+      "tag": "0002_shares_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792265879923,
+      "tag": "0003_view_counts",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792302447768,
+      "tag": "0004_content_format_post_module",
+      "breakpoints": true
     }
   ]
 }

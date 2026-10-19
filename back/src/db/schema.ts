@@ -1,5 +1,5 @@
 import { relations, type InferInsertModel, type InferSelectModel } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const timestamps = {
   createdAt: text("created_at")
@@ -9,6 +9,10 @@ const timestamps = {
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
 } as const;
+
+/** How a note's or a post's text is written; decides how the page renders it. */
+export const CONTENT_FORMATS = ["markdown", "text"] as const;
+export type ContentFormat = (typeof CONTENT_FORMATS)[number];
 
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -54,6 +58,7 @@ export const notes = sqliteTable("notes", {
     onDelete: "set null",
   }),
   title: text("title").notNull(),
+  format: text("format", { enum: CONTENT_FORMATS }).notNull().default("markdown"),
   content: text("content")
     .notNull()
     .$defaultFn(() => "{}"),
@@ -71,6 +76,9 @@ export const notesPosts = sqliteTable("notes_posts", {
   noteId: integer("note_id")
     .notNull()
     .references(() => notes.id, { onDelete: "cascade" }),
+  format: text("format", { enum: CONTENT_FORMATS }).notNull().default("markdown"),
+  /** Slug of the module attached under the post's text, or `null` for a plain post. */
+  moduleSlug: text("module_slug"),
   content: text("content")
     .notNull()
     .$defaultFn(() => "{}"),
@@ -101,6 +109,67 @@ export const authSessions = sqliteTable("auth_sessions", {
   expiresAt: text("expires_at").notNull(),
   revokedAt: text("revoked_at"),
 });
+
+/**
+ * Polymorphic targets: a share or an attachment points at a row of another
+ * table through a (type, id) pair instead of one foreign key per table, so a new
+ * kind of object only needs a new entry here. There is no database-level cascade
+ * for these rows; deleting a target goes through `cleanupTargets`.
+ */
+export const TARGET_TYPES = ["note", "post"] as const;
+export type TargetType = (typeof TARGET_TYPES)[number];
+
+export const shares = sqliteTable(
+  "shares",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    shareableType: text("shareable_type", { enum: TARGET_TYPES }).notNull(),
+    shareableId: integer("shareable_id").notNull(),
+    /** Unguessable bearer token carried by the public link; access = knowing it. */
+    token: text("token").notNull().unique(),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [uniqueIndex("shares_target_idx").on(table.shareableType, table.shareableId)],
+);
+
+export const attachments = sqliteTable(
+  "attachments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    attachableType: text("attachable_type", { enum: TARGET_TYPES }).notNull(),
+    attachableId: integer("attachable_id").notNull(),
+    originalName: text("original_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    size: integer("size").notNull(),
+    /** Name of the file inside the uploads directory; never derived from user input. */
+    storageKey: text("storage_key").notNull().unique(),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [index("attachments_target_idx").on(table.attachableType, table.attachableId)],
+);
+
+/** How many times the public link of a note or a post was opened (owner visits excluded). */
+export const viewCounts = sqliteTable(
+  "view_counts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    targetType: text("target_type", { enum: TARGET_TYPES }).notNull(),
+    targetId: integer("target_id").notNull(),
+    count: integer("count").notNull().default(0),
+    lastViewedAt: text("last_viewed_at").notNull(),
+  },
+  (table) => [uniqueIndex("view_counts_target_idx").on(table.targetType, table.targetId)],
+);
 
 export const usersRelations = relations(users, ({ many }) => ({
   workspaces: many(workspaces),
@@ -174,6 +243,12 @@ export type NewNote = InferInsertModel<typeof notes>;
 
 export type NotePost = InferSelectModel<typeof notesPosts>;
 export type NewNotePost = InferInsertModel<typeof notesPosts>;
+
+export type Share = InferSelectModel<typeof shares>;
+export type NewShare = InferInsertModel<typeof shares>;
+
+export type Attachment = InferSelectModel<typeof attachments>;
+export type NewAttachment = InferInsertModel<typeof attachments>;
 
 export type AuthSession = InferSelectModel<typeof authSessions>;
 export type NewAuthSession = InferInsertModel<typeof authSessions>;

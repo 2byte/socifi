@@ -2,10 +2,13 @@ import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { auth } from "./middleware/auth";
 import { authRoutes } from "./routes/auth";
+import { attachmentRoutes } from "./routes/attachments";
 import { categoryRoutes } from "./routes/categories";
 import { noteRoutes } from "./routes/notes";
 import { postRoutes } from "./routes/posts";
 import { productionRoutes } from "./routes/production";
+import { publicRoutes } from "./routes/public";
+import { shareRoutes } from "./routes/shares";
 import { userRoutes } from "./routes/users";
 import { workspaceRoutes } from "./routes/workspaces";
 import { config } from "./config";
@@ -29,6 +32,9 @@ const app = new Elysia()
   .use(categoryRoutes)
   .use(noteRoutes)
   .use(postRoutes)
+  .use(shareRoutes)
+  .use(attachmentRoutes)
+  .use(publicRoutes)
   .use(userRoutes)
   .use(workspaceRoutes)
   .use(NtpmServiceManager.createPlugin())

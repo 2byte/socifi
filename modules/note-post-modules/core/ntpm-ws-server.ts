@@ -16,6 +16,7 @@ import { Elysia } from "elysia";
 import { resolvePostAuth } from "../../../back/src/middleware/post-auth";
 import { ntpmEvents } from "./ntpm-events";
 import { verifyNtpmAuth } from "./ntpm-auth";
+import { NO_GUEST_ACCESS, type NtpmGuestPolicy, type NtpmRole } from "./ntpm-guest";
 
 export interface NtpmWsMessage {
   type: "subscribe" | "message" | "unsubscribe";
@@ -27,6 +28,8 @@ export interface NtpmWsContext {
   postId: number;
   userId: number;
   login: string;
+  /** `guest` for someone holding a public share link; modules decide what that may do. */
+  role: NtpmRole;
   send: (channel: string, data: unknown) => void;
   broadcast: (channel: string, data: unknown) => void;
 }
@@ -59,6 +62,7 @@ export function createNtpmWsRoute(
   slug: string,
   channels: ChannelDef[],
   eventMappings: EventMapping[] = [],
+  guests: NtpmGuestPolicy = NO_GUEST_ACCESS,
 ): Elysia {
   const channelMap = new Map(channels.map((c) => [c.name, c.handler]));
 
@@ -69,7 +73,13 @@ export function createNtpmWsRoute(
   // anything stashed on `ws` in `open` is gone by `message`; the underlying
   // socket (`ws.raw`) is the one object that stays the same.
   interface Conn {
-    auth: { postId: number; session: { id: number; login: string }; isNtpmToken: boolean };
+    auth: {
+      postId: number;
+      session: { id: number; login: string };
+      isNtpmToken: boolean;
+      role: NtpmRole;
+      guestWrite: boolean;
+    };
     subscribed: Set<string>;
     send: (payload: string) => void;
   }
@@ -115,12 +125,23 @@ export function createNtpmWsRoute(
 
         let session: { id: number; login: string } | null = null;
         let isNtpmToken = false;
+        let role: NtpmRole = "owner";
+        let guestWrite = false;
 
         // Try NTPM post-specific token first
         const authResult = verifyNtpmAuth(token ? `Bearer ${token}` : undefined, postIdRaw);
         if (authResult) {
           session = authResult.session;
           isNtpmToken = authResult.isNtpmToken;
+          role = authResult.role;
+          guestWrite = authResult.guestWrite;
+
+          // Guests may listen only if the module was written to let them.
+          if (role === "guest" && !guests.read) {
+            ws.send(JSON.stringify({ type: "error", message: "Not available to guests" }));
+            ws.close();
+            return;
+          }
         } else {
           // Fall back to JWT auth
           const jwtAuth = await resolvePostAuth(token, postIdRaw);
@@ -133,7 +154,7 @@ export function createNtpmWsRoute(
         }
 
         const userId = session?.id ?? 0;
-        const login = session?.login ?? "ntpm-token";
+        const login = session?.login ?? (role === "guest" ? "guest" : "ntpm-token");
         const clientId = `${postId}:${userId}:${crypto.randomUUID()}`;
         const key = String(postId);
 
@@ -141,7 +162,7 @@ export function createNtpmWsRoute(
         clients.get(key)!.add(connKey(ws));
 
         conns.set(connKey(ws), {
-          auth: { postId, session: { id: userId, login }, isNtpmToken },
+          auth: { postId, session: { id: userId, login }, isNtpmToken, role, guestWrite },
           subscribed: new Set<string>(),
           send: (payload) => ws.send(payload),
         });
@@ -183,6 +204,12 @@ export function createNtpmWsRoute(
         }
 
         if (msg.type === "message") {
+          // A guest may only send if the module allows guest writes and the owner turned them on.
+          if (auth.role === "guest" && !(guests.write && auth.guestWrite)) {
+            ws.send(JSON.stringify({ type: "error", message: "Read-only for guests" }));
+            return;
+          }
+
           if (!subscribed.has(msg.channel)) {
             ws.send(JSON.stringify({ type: "error", message: `Not subscribed to: ${msg.channel}` }));
             return;
@@ -195,6 +222,7 @@ export function createNtpmWsRoute(
             postId: auth.postId,
             userId: auth.session.id,
             login: auth.session.login,
+            role: auth.role,
             send: (channel: string, data: unknown) => {
               ws.send(JSON.stringify({ type: "message", channel, data }));
             },

@@ -1,5 +1,6 @@
 /**
- * PM2 process definition for pw.socifi.io.
+ * PM2 process definition for pw.oopz.pro (the app directory keeps the name of
+ * the domain it was first deployed under).
  *
  *   pm2 start deploy/ecosystem.config.cjs
  *   pm2 save

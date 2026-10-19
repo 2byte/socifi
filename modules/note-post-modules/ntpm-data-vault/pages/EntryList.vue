@@ -57,8 +57,9 @@ function toggleReveal(key: string) {
   else revealed.value.add(key);
 }
 
-function maskValue(value: string): string {
-  if (value.length <= 8) return "••••••••";
+function maskValue(value: string | undefined): string {
+  // Older entries may have no value at all; show them masked instead of failing the whole list.
+  if (!value || value.length <= 8) return "••••••••";
   return value.slice(0, 3) + "•••" + value.slice(-3);
 }
 

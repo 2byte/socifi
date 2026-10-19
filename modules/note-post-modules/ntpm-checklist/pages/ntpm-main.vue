@@ -1,6 +1,6 @@
 <template>
   <div class="checklist">
-    <form class="checklist__add" @submit.prevent="add">
+    <form v-if="!readonly" class="checklist__add" @submit.prevent="add">
       <q-input
         v-model="draft"
         dense
@@ -25,11 +25,12 @@
         <q-item-section side>
           <q-checkbox
             :model-value="item.payload.done"
+            :disable="readonly"
             @update:model-value="toggle(item.id, item.payload.text, $event)"
           />
         </q-item-section>
         <q-item-section class="checklist__text">{{ item.payload.text }}</q-item-section>
-        <q-item-section side>
+        <q-item-section v-if="!readonly" side>
           <q-btn flat dense round icon="close" aria-label="Delete" @click.prevent="remove(item.id)" />
         </q-item-section>
       </q-item>
@@ -51,7 +52,13 @@ import { useNtpmApi } from "../../core/useNtpmApi";
 import { useNtpmWs } from "../../core/useNtpmWs";
 import type { ChecklistItem } from "../NtpmChecklistModule";
 
-const props = defineProps<{ postId: number; token: string; apiRoot?: string }>();
+const props = defineProps<{
+  postId: number;
+  token: string;
+  apiRoot?: string;
+  /** Set by the host for a guest who may look but not change anything. */
+  readonly?: boolean;
+}>();
 
 const api = useNtpmApi<ChecklistItem>(props.postId, "checklist", {
   token: props.token,

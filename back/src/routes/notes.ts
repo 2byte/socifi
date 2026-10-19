@@ -5,6 +5,9 @@ import { toNoteDto } from "../mappers/note.mapper";
 import { noteRepository } from "../repositories/note.repository";
 import { workspaceRepository } from "../repositories/workspace.repository";
 import { categoryRepository } from "../repositories/category.repository";
+import { targetRepository } from "../repositories/target.repository";
+
+const contentFormat = t.Union([t.Literal("markdown"), t.Literal("text")]);
 
 function stringifyJson(value: unknown, fallback: string) {
   if (value === undefined) {
@@ -89,7 +92,7 @@ export const noteRoutes = new Elysia({ prefix: "/notes" })
         return fail("Note not found");
       }
 
-      return ok({ note: toNoteDto(note) });
+      return ok({ note: toNoteDto(note, targetRepository.viewCount("note", note.id)) });
     },
     {
       params: t.Object({ id: t.String() }),
@@ -136,6 +139,7 @@ export const noteRoutes = new Elysia({ prefix: "/notes" })
         categoryId,
         workspaceId,
         title: body.title.trim(),
+        format: body.format ?? "markdown",
         content: stringifyJson(body.content, JSON.stringify("")),
         tags: stringifyJson(body.tags ?? [], "[]"),
         props: stringifyJson(body.props ?? {}, "{}"),
@@ -148,6 +152,7 @@ export const noteRoutes = new Elysia({ prefix: "/notes" })
     {
       body: t.Object({
         title: t.String({ minLength: 1 }),
+        format: t.Optional(contentFormat),
         categoryId: t.Optional(t.Union([t.Number(), t.Null()])),
         workspaceId: t.Optional(t.Union([t.Number(), t.Null()])),
         content: t.Optional(t.Any()),
@@ -198,6 +203,7 @@ export const noteRoutes = new Elysia({ prefix: "/notes" })
 
       const note = noteRepository.update(Number(id), session.id, {
         title: body.title !== undefined ? body.title.trim() : existing.title,
+        format: body.format ?? existing.format,
         categoryId: nextCategoryId,
         workspaceId: nextWorkspaceId,
         content:
@@ -221,6 +227,7 @@ export const noteRoutes = new Elysia({ prefix: "/notes" })
       params: t.Object({ id: t.String() }),
       body: t.Object({
         title: t.Optional(t.String({ minLength: 1 })),
+        format: t.Optional(contentFormat),
         categoryId: t.Optional(t.Union([t.Number(), t.Null()])),
         workspaceId: t.Optional(t.Union([t.Number(), t.Null()])),
         content: t.Optional(t.Any()),
@@ -246,6 +253,13 @@ export const noteRoutes = new Elysia({ prefix: "/notes" })
         return fail("Note not found");
       }
 
+      // Shares and files of the note and of its posts are polymorphic rows, so the
+      // note's own cascade does not reach them.
+      await targetRepository.cleanupTargets(
+        "post",
+        noteRepository.listPostsByNoteId(note.id).map((post) => post.id),
+      );
+      await targetRepository.cleanupTargets("note", [note.id]);
       noteRepository.delete(Number(id), session.id);
       return ok({ success: true });
     },

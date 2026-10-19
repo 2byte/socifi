@@ -1,4 +1,5 @@
 export type {
+  ContentFormat,
   CreateNoteDto,
   CreateNotePostDto,
   JsonObject,

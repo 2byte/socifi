@@ -31,28 +31,33 @@ function parseTags(value: string): string[] {
     : [];
 }
 
-export function toNoteDto(note: Note): NoteDto {
+export function toNoteDto(note: Note, viewCount?: number): NoteDto {
   return {
     id: note.id,
     userId: note.userId,
     categoryId: note.categoryId ?? null,
     workspaceId: note.workspaceId ?? null,
     title: note.title,
+    format: note.format,
     content: parseJsonValue(note.content, {}),
     tags: parseTags(note.tags),
     props: parseJsonObject(note.props, {}),
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
+    ...(viewCount !== undefined ? { viewCount } : {}),
   };
 }
 
-export function toNotePostDto(post: NotePost): NotePostDto {
+export function toNotePostDto(post: NotePost, viewCount?: number): NotePostDto {
   return {
     id: post.id,
     noteId: post.noteId,
+    format: post.format,
+    moduleSlug: post.moduleSlug ?? null,
     content: parseJsonValue(post.content, {}),
     tags: parseTags(post.tags),
     props: parseJsonObject(post.props, {}),
     createdAt: post.createdAt,
+    ...(viewCount !== undefined ? { viewCount } : {}),
   };
 }

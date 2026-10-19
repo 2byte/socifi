@@ -4,6 +4,7 @@ import {
   notes,
   notesPosts,
   type NewNote,
+  type ContentFormat,
   type NewNotePost,
 } from "../db/schema";
 
@@ -13,6 +14,7 @@ type CreateNoteInput = Pick<
   | "categoryId"
   | "workspaceId"
   | "title"
+  | "format"
   | "content"
   | "tags"
   | "props"
@@ -24,6 +26,7 @@ type UpdateNoteInput = {
   categoryId?: number | null;
   workspaceId?: number | null;
   title?: string;
+  format?: ContentFormat;
   content?: string;
   tags?: string;
   props?: string;
@@ -32,10 +35,11 @@ type UpdateNoteInput = {
 
 type CreateNotePostInput = Pick<
   NewNotePost,
-  "noteId" | "content" | "tags" | "props" | "createdAt"
+  "noteId" | "format" | "moduleSlug" | "content" | "tags" | "props" | "createdAt"
 >;
 
 type UpdateNotePostInput = {
+  format?: ContentFormat;
   content?: string;
   tags?: string;
   props?: string;
@@ -116,6 +120,8 @@ export const noteRepository = {
       .select({
         id: notesPosts.id,
         noteId: notesPosts.noteId,
+        format: notesPosts.format,
+        moduleSlug: notesPosts.moduleSlug,
         content: notesPosts.content,
         tags: notesPosts.tags,
         props: notesPosts.props,

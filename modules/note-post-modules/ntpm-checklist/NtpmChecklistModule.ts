@@ -22,6 +22,8 @@ export class NtpmChecklistModule extends NtpmBaseModule<ChecklistItem> {
       slug: "checklist",
       name: "Checklist",
       version: "0.1.0",
+      // Readable by anyone with the link; editable too once the post owner allows it.
+      guests: { read: true, write: true },
     });
   }
 

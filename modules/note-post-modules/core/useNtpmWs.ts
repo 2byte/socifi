@@ -32,11 +32,20 @@ export function useNtpmWs(options: NtpmWsOptions) {
   const handlers = new Map<string, Set<(data: unknown) => void>>();
 
   function connect() {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host;
-    const url = `${protocol}//${host}${apiRoot}/post/${postId}/internal/${moduleSlug}/ws?token=${encodeURIComponent(token)}`;
+    // `apiRoot` is either a path on this origin ("/api") or an absolute URL.
+    const root = /^https?:///.test(apiRoot)
+      ? apiRoot.replace(/^http/, "ws")
+      : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}${apiRoot}`;
+    const url = `${root}/post/${postId}/internal/${moduleSlug}/ws?token=${encodeURIComponent(token)}`;
 
-    const ws = new WebSocket(url);
+    // A socket that cannot open must never take the module page down with it.
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      error.value = String(e);
+      return;
+    }
     socket.value = ws;
 
     ws.onopen = () => {
